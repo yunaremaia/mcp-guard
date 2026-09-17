@@ -97,3 +97,7 @@ jobs:
 ## License
 
 MIT
+
+## Trust boundary
+
+Treat MCP tool responses as untrusted input until validated by your agent policy.
