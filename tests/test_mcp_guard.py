@@ -253,6 +253,51 @@ class TestRules:
         findings = rule.check(write_cap, manifest)
         assert len(findings) == 0
 
+    def test_write_with_read_multi_underscore_prefix_match(self):
+        rule = WriteWithoutReadRule()
+        write_cap = MCPCapability(
+            name="create_user_profile",
+            type=MCPCapabilityType.TOOL,
+            is_write=True,
+        )
+        read_cap = MCPCapability(
+            name="get_user_profile_settings",
+            type=MCPCapabilityType.TOOL,
+        )
+        manifest = MCPManifest(name="test", capabilities=[write_cap, read_cap])
+        findings = rule.check(write_cap, manifest)
+        assert len(findings) == 0
+
+    def test_write_with_read_multi_underscore_exact_match(self):
+        rule = WriteWithoutReadRule()
+        write_cap = MCPCapability(
+            name="create_user_profile",
+            type=MCPCapabilityType.TOOL,
+            is_write=True,
+        )
+        read_cap = MCPCapability(
+            name="get_user_profile",
+            type=MCPCapabilityType.TOOL,
+        )
+        manifest = MCPManifest(name="test", capabilities=[write_cap, read_cap])
+        findings = rule.check(write_cap, manifest)
+        assert len(findings) == 0
+
+    def test_write_with_read_multi_underscore_unmatched(self):
+        rule = WriteWithoutReadRule()
+        write_cap = MCPCapability(
+            name="create_user_profile",
+            type=MCPCapabilityType.TOOL,
+            is_write=True,
+        )
+        read_cap = MCPCapability(
+            name="get_organization",
+            type=MCPCapabilityType.TOOL,
+        )
+        manifest = MCPManifest(name="test", capabilities=[write_cap, read_cap])
+        findings = rule.check(write_cap, manifest)
+        assert len(findings) == 1
+
     def test_destructive_without_confirmation(self):
         rule = DestructiveWithoutConfirmationRule()
         cap = MCPCapability(

@@ -154,7 +154,18 @@ class WriteWithoutReadRule(SecurityRule):
         for prefix in ["create_", "update_", "delete_", "add_", "set_", "write_"]:
             if name.startswith(prefix):
                 resource = name[len(prefix):]
-                if resource not in resource_names:
+                # Check for exact match or prefix match (e.g. user_profile and user_profile_settings)
+                has_read = False
+                for read_resource in resource_names:
+                    if (
+                        read_resource == resource
+                        or read_resource.startswith(resource + "_")
+                        or resource.startswith(read_resource + "_")
+                    ):
+                        has_read = True
+                        break
+
+                if not has_read:
                     findings.append(RiskFinding(
                         rule_id=self.rule_id,
                         level=RiskLevel.MEDIUM,
