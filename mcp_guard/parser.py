@@ -45,8 +45,17 @@ class MCPParser:
     def from_json(cls, json_path: str | Path) -> MCPManifest:
         """Parse MCP manifest from a JSON file."""
         json_path = Path(json_path)
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in {json_path}: {e}") from e
+        except OSError as e:
+            raise ValueError(f"Cannot read {json_path}: {e}") from e
+
+        if not isinstance(data, dict):
+            raise ValueError(f"Expected JSON object in {json_path}, got {type(data).__name__}")
+
         return cls.from_dict(data)
 
     @classmethod
