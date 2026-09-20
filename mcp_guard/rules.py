@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .models import (
     MCPCapability,
-    MCPCapabilityType,
     MCPManifest,
     RiskFinding,
     RiskLevel,
@@ -39,14 +38,19 @@ class UnauthenticatedWriteRule(SecurityRule):
     ) -> list[RiskFinding]:
         findings = []
         if capability.is_write and not capability.has_auth:
-            findings.append(RiskFinding(
-                rule_id=self.rule_id,
-                level=RiskLevel.HIGH,
-                message=f"Capability '{capability.name}' performs write operations without authentication",
-                capability_name=capability.name,
-                capability_type=capability.type,
-                suggestion="Add authentication (OAuth2, API key) to this capability",
-            ))
+            findings.append(
+                RiskFinding(
+                    rule_id=self.rule_id,
+                    level=RiskLevel.HIGH,
+                    message=(
+                        f"Capability '{capability.name}' performs write operations "
+                        "without authentication"
+                    ),
+                    capability_name=capability.name,
+                    capability_type=capability.type,
+                    suggestion="Add authentication (OAuth2, API key) to this capability",
+                )
+            )
         return findings
 
 
@@ -63,14 +67,21 @@ class UnauthenticatedDestructiveRule(SecurityRule):
     ) -> list[RiskFinding]:
         findings = []
         if capability.is_destructive and not capability.has_auth:
-            findings.append(RiskFinding(
-                rule_id=self.rule_id,
-                level=RiskLevel.CRITICAL,
-                message=f"Capability '{capability.name}' performs destructive operations without authentication",
-                capability_name=capability.name,
-                capability_type=capability.type,
-                suggestion="Add authentication and confirmation mechanism for destructive operations",
-            ))
+            findings.append(
+                RiskFinding(
+                    rule_id=self.rule_id,
+                    level=RiskLevel.CRITICAL,
+                    message=(
+                        f"Capability '{capability.name}' performs destructive operations "
+                        "without authentication"
+                    ),
+                    capability_name=capability.name,
+                    capability_type=capability.type,
+                    suggestion=(
+                        "Add authentication and confirmation mechanism for destructive operations"
+                    ),
+                )
+            )
         return findings
 
 
@@ -89,17 +100,19 @@ class ExcessivePermissionsRule(SecurityRule):
     ) -> list[RiskFinding]:
         findings = []
         if len(capability.permissions) > self.MAX_PERMISSIONS:
-            findings.append(RiskFinding(
-                rule_id=self.rule_id,
-                level=RiskLevel.MEDIUM,
-                message=(
-                    f"Capability '{capability.name}' has {len(capability.permissions)} "
-                    f"permissions (max recommended: {self.MAX_PERMISSIONS})"
-                ),
-                capability_name=capability.name,
-                capability_type=capability.type,
-                suggestion="Review and reduce permissions to minimum required",
-            ))
+            findings.append(
+                RiskFinding(
+                    rule_id=self.rule_id,
+                    level=RiskLevel.MEDIUM,
+                    message=(
+                        f"Capability '{capability.name}' has {len(capability.permissions)} "
+                        f"permissions (max recommended: {self.MAX_PERMISSIONS})"
+                    ),
+                    capability_name=capability.name,
+                    capability_type=capability.type,
+                    suggestion="Review and reduce permissions to minimum required",
+                )
+            )
         return findings
 
 
@@ -116,14 +129,16 @@ class NoDescriptionRule(SecurityRule):
     ) -> list[RiskFinding]:
         findings = []
         if not capability.description or len(capability.description.strip()) < 10:
-            findings.append(RiskFinding(
-                rule_id=self.rule_id,
-                level=RiskLevel.LOW,
-                message=f"Capability '{capability.name}' lacks a meaningful description",
-                capability_name=capability.name,
-                capability_type=capability.type,
-                suggestion="Add a clear description of what this capability does",
-            ))
+            findings.append(
+                RiskFinding(
+                    rule_id=self.rule_id,
+                    level=RiskLevel.LOW,
+                    message=f"Capability '{capability.name}' lacks a meaningful description",
+                    capability_name=capability.name,
+                    capability_type=capability.type,
+                    suggestion="Add a clear description of what this capability does",
+                )
+            )
         return findings
 
 
@@ -153,8 +168,9 @@ class WriteWithoutReadRule(SecurityRule):
         # Extract resource name from write operation
         for prefix in ["create_", "update_", "delete_", "add_", "set_", "write_"]:
             if name.startswith(prefix):
-                resource = name[len(prefix):]
-                # Check for exact match or prefix match (e.g. user_profile and user_profile_settings)
+                resource = name[len(prefix) :]
+                # Check for exact match or prefix match
+                # (e.g. user_profile and user_profile_settings)
                 has_read = False
                 for read_resource in resource_names:
                     if (
@@ -166,17 +182,19 @@ class WriteWithoutReadRule(SecurityRule):
                         break
 
                 if not has_read:
-                    findings.append(RiskFinding(
-                        rule_id=self.rule_id,
-                        level=RiskLevel.MEDIUM,
-                        message=(
-                            f"Write capability '{capability.name}' has no corresponding "
-                            f"read capability (expected 'get_{resource}' or similar)"
-                        ),
-                        capability_name=capability.name,
-                        capability_type=capability.type,
-                        suggestion=f"Add a 'get_{resource}' capability for data visibility",
-                    ))
+                    findings.append(
+                        RiskFinding(
+                            rule_id=self.rule_id,
+                            level=RiskLevel.MEDIUM,
+                            message=(
+                                f"Write capability '{capability.name}' has no corresponding "
+                                f"read capability (expected 'get_{resource}' or similar)"
+                            ),
+                            capability_name=capability.name,
+                            capability_type=capability.type,
+                            suggestion=f"Add a 'get_{resource}' capability for data visibility",
+                        )
+                    )
                 break
 
         return findings
@@ -201,22 +219,59 @@ class DestructiveWithoutConfirmationRule(SecurityRule):
         schema = capability.input_schema
         properties = schema.get("properties", {})
         has_confirmation = any(
-            key in properties
-            for key in ["confirm", "confirmation", "force", "dry_run", "dryRun"]
+            key in properties for key in ["confirm", "confirmation", "force", "dry_run", "dryRun"]
         )
 
         if not has_confirmation:
-            findings.append(RiskFinding(
-                rule_id=self.rule_id,
-                level=RiskLevel.HIGH,
-                message=(
-                    f"Destructive capability '{capability.name}' lacks a confirmation "
-                    f"mechanism (no 'confirm' or 'dry_run' field)"
-                ),
-                capability_name=capability.name,
-                capability_type=capability.type,
-                suggestion="Add a 'confirm' boolean field to prevent accidental execution",
-            ))
+            findings.append(
+                RiskFinding(
+                    rule_id=self.rule_id,
+                    level=RiskLevel.HIGH,
+                    message=(
+                        f"Destructive capability '{capability.name}' lacks a confirmation "
+                        f"mechanism (no 'confirm' or 'dry_run' field)"
+                    ),
+                    capability_name=capability.name,
+                    capability_type=capability.type,
+                    suggestion="Add a 'confirm' boolean field to prevent accidental execution",
+                )
+            )
+        return findings
+
+
+class ExplicitlyDisabledAuthRule(SecurityRule):
+    """Detect capabilities that explicitly disable authentication."""
+
+    rule_id = "MCP007"
+    description = "Explicitly disabled authentication"
+
+    def check(
+        self,
+        capability: MCPCapability,
+        manifest: MCPManifest,
+    ) -> list[RiskFinding]:
+        findings = []
+        if capability.auth_disabled:
+            level = (
+                RiskLevel.CRITICAL
+                if capability.is_destructive
+                else (RiskLevel.HIGH if capability.is_write else RiskLevel.MEDIUM)
+            )
+            findings.append(
+                RiskFinding(
+                    rule_id=self.rule_id,
+                    level=level,
+                    message=(
+                        f"Capability '{capability.name}' explicitly disables "
+                        "authentication ('auth': false)"
+                    ),
+                    capability_name=capability.name,
+                    capability_type=capability.type,
+                    suggestion=(
+                        "Enable authentication or verify that unauthenticated access is intentional"
+                    ),
+                )
+            )
         return findings
 
 
@@ -228,4 +283,5 @@ ALL_RULES: list[SecurityRule] = [
     NoDescriptionRule(),
     WriteWithoutReadRule(),
     DestructiveWithoutConfirmationRule(),
+    ExplicitlyDisabledAuthRule(),
 ]

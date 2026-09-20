@@ -79,8 +79,19 @@ mcp-guard scan ./my-mcp-server --config policy.yaml --deny
 | MCP004 | LOW | Capability without description |
 | MCP005 | MEDIUM | Write capability without corresponding read |
 | MCP006 | HIGH | Destructive operation without confirmation |
+| MCP007 | MEDIUM / HIGH / CRITICAL | Explicitly disabled authentication ('auth': false) |
 | DENY001 | CRITICAL | Server matches security policy deny rule |
 | DENY002 | CRITICAL | Tool capability matches security policy deny rule |
+
+### Authentication Detection Semantics
+
+`mcp-guard` validates that capability authentication fields contain truthy configuration rather than mere key presence:
+
+- **Auth Required**: Detected when `auth`, `authorization`, or `security` is present with a truthy value (`true`, configuration object/dict, non-empty string, or non-empty list).
+- **Auth Explicitly Disabled**: Flagged when `auth` or `authorization` is set to `false` or `"disabled"`. Capabilities explicitly disabling authentication trigger rule `MCP007` and cannot bypass `MCP001` (write) or `MCP002` (destructive) checks.
+- **No Auth Field / Falsy**: Falsy values like `null`, `""`, `0`, or `{}` are treated as unauthenticated.
+- **SARIF Integration**: SARIF 2.1.0 output records `properties.auth_status` as `"required"`, `"disabled"`, or `"unknown"` for each capability finding.
+
 
 ## Example Output
 

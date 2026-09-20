@@ -37,8 +37,7 @@ class MCPParser:
             if config_path.exists():
                 return cls.from_json(config_path)
         raise FileNotFoundError(
-            f"No MCP config found in {dir_path}. "
-            f"Expected one of: {', '.join(cls.CONFIG_FILES)}"
+            f"No MCP config found in {dir_path}. Expected one of: {', '.join(cls.CONFIG_FILES)}"
         )
 
     @classmethod
@@ -46,7 +45,7 @@ class MCPParser:
         """Parse MCP manifest from a JSON file."""
         json_path = Path(json_path)
         try:
-            with open(json_path, "r", encoding="utf-8") as f:
+            with open(json_path, encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in {json_path}: {e}") from e
@@ -92,13 +91,14 @@ class MCPParser:
         """Parse a single capability from raw data."""
         # Detect permissions from input schema
         permissions = cls._extract_permissions(data)
-        
+
         # Detect if capability requires auth
         has_auth = cls._detect_auth(data)
-        
+        auth_disabled = cls._detect_auth_disabled(data)
+
         # Detect if capability is destructive
         is_destructive = cls._detect_destructive(data)
-        
+
         # Detect if capability is write-type
         is_write = cls._detect_write(data)
 
@@ -109,6 +109,7 @@ class MCPParser:
             input_schema=data.get("inputSchema", data.get("input_schema", {})),
             permissions=permissions,
             has_auth=has_auth,
+            auth_disabled=auth_disabled,
             is_destructive=is_destructive,
             is_write=is_write,
         )
@@ -117,30 +118,44 @@ class MCPParser:
     def _extract_permissions(cls, data: dict[str, Any]) -> list[str]:
         """Extract permissions from capability data."""
         permissions = []
-        schema = data.get("inputSchema", data.get("input_schema", {}))
-        
+
         # Check for explicit permissions
         if "permissions" in data:
             permissions.extend(data["permissions"])
-        
+
         # Check for scopes in auth config
         if "auth" in data and isinstance(data["auth"], dict):
             scopes = data["auth"].get("scopes", [])
             permissions.extend(scopes)
-        
+
         return permissions
 
     @classmethod
     def _detect_auth(cls, data: dict[str, Any]) -> bool:
-        """Detect if capability has authentication configured."""
-        if "auth" in data:
-            return True
-        if "authorization" in data:
-            return True
+        """Detect if capability has authentication configured and enabled.
+
+        Returns True only if auth, authorization, or security is present and truthy
+        (not False, None, 0, empty string, or empty collection).
+        """
+        for key in ("auth", "authorization"):
+            if key in data:
+                val = data[key]
+                if val:
+                    return True
         # Check for security in OpenAPI-style
-        security = data.get("security", [])
-        if security:
-            return True
+        return bool(data.get("security"))
+
+    @classmethod
+    def _detect_auth_disabled(cls, data: dict[str, Any]) -> bool:
+        """Detect if capability explicitly disables authentication (e.g. 'auth': false)."""
+        for key in ("auth", "authorization"):
+            if key in data:
+                val = data[key]
+                if val is False or (
+                    isinstance(val, str)
+                    and val.strip().lower() in ("false", "disabled", "none", "off")
+                ):
+                    return True
         return False
 
     @classmethod
@@ -148,29 +163,41 @@ class MCPParser:
         """Detect if capability performs destructive operations."""
         name = data.get("name", "").lower()
         desc = data.get("description", "").lower()
-        
+
         destructive_keywords = [
-            "delete", "remove", "destroy", "drop", "purge",
-            "erase", "clear", "truncate", "kill", "terminate",
+            "delete",
+            "remove",
+            "destroy",
+            "drop",
+            "purge",
+            "erase",
+            "clear",
+            "truncate",
+            "kill",
+            "terminate",
         ]
-        
-        for keyword in destructive_keywords:
-            if keyword in name or keyword in desc:
-                return True
-        return False
+
+        return any(keyword in name or keyword in desc for keyword in destructive_keywords)
 
     @classmethod
     def _detect_write(cls, data: dict[str, Any]) -> bool:
         """Detect if capability performs write operations."""
         name = data.get("name", "").lower()
         desc = data.get("description", "").lower()
-        
+
         write_keywords = [
-            "create", "update", "write", "post", "put", "patch",
-            "set", "add", "insert", "modify", "edit", "send",
+            "create",
+            "update",
+            "write",
+            "post",
+            "put",
+            "patch",
+            "set",
+            "add",
+            "insert",
+            "modify",
+            "edit",
+            "send",
         ]
-        
-        for keyword in write_keywords:
-            if keyword in name or keyword in desc:
-                return True
-        return False
+
+        return any(keyword in name or keyword in desc for keyword in write_keywords)

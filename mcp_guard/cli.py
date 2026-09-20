@@ -181,7 +181,12 @@ def info(path: str):
     console.print(f"[bold]Capabilities:[/bold] {len(manifest.capabilities)}")
 
     for cap in manifest.capabilities:
-        auth_status = "🔒" if cap.has_auth else "🔓"
+        if cap.has_auth:
+            auth_status = "🔒"
+        elif cap.auth_disabled:
+            auth_status = "🚫"
+        else:
+            auth_status = "🔓"
         write_status = "✏️" if cap.is_write else ""
         destructive_status = "💥" if cap.is_destructive else ""
         console.print(

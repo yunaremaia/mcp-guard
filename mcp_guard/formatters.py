@@ -49,40 +49,57 @@ def to_sarif(result: ScanResult) -> dict[str, Any]:
     for finding in result.findings:
         # Add rule if not already added
         if finding.rule_id not in [r["id"] for r in rules]:
-            rules.append({
-                "id": finding.rule_id,
-                "shortDescription": {"text": finding.message},
-                "defaultConfiguration": {
-                    "level": _sarif_level(finding.level),
-                },
-            })
-
-        results.append({
-            "ruleId": finding.rule_id,
-            "level": _sarif_level(finding.level),
-            "message": {"text": finding.message},
-            "locations": [{
-                "physicalLocation": {
-                    "artifactLocation": {
-                        "uri": f"mcp-server/{finding.capability_name}",
-                    }
+            rules.append(
+                {
+                    "id": finding.rule_id,
+                    "shortDescription": {"text": finding.message},
+                    "defaultConfiguration": {
+                        "level": _sarif_level(finding.level),
+                    },
                 }
-            }],
-        })
+            )
+
+        cap = next(
+            (c for c in result.manifest.capabilities if c.name == finding.capability_name),
+            None,
+        )
+        auth_status = cap.auth_status if cap else "unknown"
+
+        results.append(
+            {
+                "ruleId": finding.rule_id,
+                "level": _sarif_level(finding.level),
+                "message": {"text": finding.message},
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {
+                                "uri": f"mcp-server/{finding.capability_name}",
+                            }
+                        }
+                    }
+                ],
+                "properties": {
+                    "auth_status": auth_status,
+                },
+            }
+        )
 
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{
-            "tool": {
-                "driver": {
-                    "name": "mcp-guard",
-                    "informationUri": "https://github.com/yunaremaia/mcp-guard",
-                    "rules": rules,
-                }
-            },
-            "results": results,
-        }],
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "mcp-guard",
+                        "informationUri": "https://github.com/yunaremaia/mcp-guard",
+                        "rules": rules,
+                    }
+                },
+                "results": results,
+            }
+        ],
     }
 
 
@@ -115,28 +132,40 @@ def to_rich(result: ScanResult) -> None:
     score_color = _level_color(result.risk_score)
 
     console.print()
-    console.print(Panel(
-        f"[bold]{result.manifest.name}[/bold] v{result.manifest.version}\n"
-        f"{result.manifest.description}",
-        title="MCP Server",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[bold]{result.manifest.name}[/bold] v{result.manifest.version}\n"
+            f"{result.manifest.description}",
+            title="MCP Server",
+            border_style="blue",
+        )
+    )
 
     # Risk Score
-    console.print(Panel(
-        f"[{score_color}]Risk Score: {result.risk_score.value}[/{score_color}]",
-        border_style=score_color,
-    ))
+    console.print(
+        Panel(
+            f"[{score_color}]Risk Score: {result.risk_score.value}[/{score_color}]",
+            border_style=score_color,
+        )
+    )
 
     # Summary table
     summary_table = Table(title="Summary")
     summary_table.add_column("Metric", style="cyan")
     summary_table.add_column("Count", style="white")
     summary_table.add_row("Total Capabilities", str(result.summary["total_capabilities"]))
-    summary_table.add_row("Critical", f'[red]{result.summary["critical"]}[/red]')
-    summary_table.add_row("High", f'[red]{result.summary["high"]}[/red]')
-    summary_table.add_row("Medium", f'[yellow]{result.summary["medium"]}[/yellow]')
-    summary_table.add_row("Low", f'[green]{result.summary["low"]}[/green]')
+    summary_table.add_row("Critical", f"[red]{result.summary['critical']}[/red]")
+    summary_table.add_row("High", f"[red]{result.summary['high']}[/red]")
+    summary_table.add_row("Medium", f"[yellow]{result.summary['medium']}[/yellow]")
+    summary_table.add_row("Low", f"[green]{result.summary['low']}[/green]")
+    summary_table.add_row(
+        "Auth Required", f"[green]{result.summary.get('auth_required', 0)}[/green]"
+    )
+    if result.summary.get("auth_disabled", 0) > 0:
+        summary_table.add_row(
+            "Auth Explicitly Disabled", f"[red]{result.summary['auth_disabled']}[/red]"
+        )
+    summary_table.add_row("No Auth Field", str(result.summary.get("auth_none", 0)))
     console.print(summary_table)
 
     # Findings
