@@ -54,7 +54,7 @@ class MCPManifest(BaseModel):
     name: str
     version: str = "0.0.0"
     description: str = ""
-    capabilities: list[MCPCapability] = Field(default_factory=list)
+    capabilities: list[MCPCapability] = Field(default_factory=list[MCPCapability])
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -73,7 +73,7 @@ class ScanResult(BaseModel):
     """Complete scan result."""
 
     manifest: MCPManifest
-    findings: list[RiskFinding] = Field(default_factory=list)
+    findings: list[RiskFinding] = Field(default_factory=list[RiskFinding])
     risk_score: RiskLevel = RiskLevel.LOW
     summary: dict[str, int] = Field(default_factory=dict)
 

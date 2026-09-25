@@ -27,19 +27,18 @@ class DenyPolicy(BaseModel):
         content: str
         if isinstance(source, Path):
             content = source.read_text(encoding="utf-8")
-        elif isinstance(source, str):
-            if "\n" not in source and len(source) < 1024 and Path(source).is_file():
-                content = Path(source).read_text(encoding="utf-8")
-            else:
-                content = source
+        elif "\n" not in source and len(source) < 1024 and Path(source).is_file():
+            content = Path(source).read_text(encoding="utf-8")
         else:
-            content = str(source)
+            content = source
 
         parsed: dict[str, Any] = yaml.safe_load(content) or {}
-        deny_block = parsed.get("deny", parsed)
+        deny_block: dict[str, Any] = parsed.get("deny", parsed)
 
-        servers = [str(s) for s in deny_block.get("servers") or []]
-        tools = [str(t) for t in deny_block.get("tools") or []]
+        raw_servers: list[Any] = deny_block.get("servers") or []
+        raw_tools: list[Any] = deny_block.get("tools") or []
+        servers = [str(s) for s in raw_servers]
+        tools = [str(t) for t in raw_tools]
 
         return cls(servers=servers, tools=tools)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .models import MCPCapability, MCPCapabilityType, MCPManifest
 
@@ -55,12 +55,12 @@ class MCPParser:
         if not isinstance(data, dict):
             raise ValueError(f"Expected JSON object in {json_path}, got {type(data).__name__}")
 
-        return cls.from_dict(data)
+        return cls.from_dict(cast("dict[str, Any]", data))
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MCPManifest:
         """Parse MCP manifest from a dictionary."""
-        capabilities = []
+        capabilities: list[MCPCapability] = []
 
         # Parse tools
         for tool in data.get("tools", []):
@@ -117,16 +117,17 @@ class MCPParser:
     @classmethod
     def _extract_permissions(cls, data: dict[str, Any]) -> list[str]:
         """Extract permissions from capability data."""
-        permissions = []
+        permissions: list[str] = []
 
         # Check for explicit permissions
         if "permissions" in data:
             permissions.extend(data["permissions"])
 
         # Check for scopes in auth config
-        if "auth" in data and isinstance(data["auth"], dict):
-            scopes = data["auth"].get("scopes", [])
-            permissions.extend(scopes)
+        auth: Any = data.get("auth")
+        if isinstance(auth, dict):
+            auth_block = cast("dict[str, Any]", auth)
+            permissions.extend(auth_block.get("scopes", []))
 
         return permissions
 

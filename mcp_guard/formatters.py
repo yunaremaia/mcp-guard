@@ -43,8 +43,8 @@ def to_json(result: ScanResult, indent: int = 2) -> str:
 
 def to_sarif(result: ScanResult) -> dict[str, Any]:
     """Convert scan result to SARIF format for GitHub Code Scanning."""
-    rules = []
-    results = []
+    rules: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
 
     for finding in result.findings:
         # Add rule if not already added

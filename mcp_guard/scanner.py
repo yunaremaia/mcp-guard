@@ -14,7 +14,7 @@ class Scanner:
         self,
         rules: list[SecurityRule] | None = None,
         deny_policy: DenyPolicy | None = None,
-    ):
+    ) -> None:
         """Initialize scanner with rules and optional deny policy."""
         self.rules = rules or list(ALL_RULES)
         self.deny_policy = deny_policy

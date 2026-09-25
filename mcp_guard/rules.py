@@ -36,7 +36,7 @@ class UnauthenticatedWriteRule(SecurityRule):
         capability: MCPCapability,
         manifest: MCPManifest,
     ) -> list[RiskFinding]:
-        findings = []
+        findings: list[RiskFinding] = []
         if capability.is_write and not capability.has_auth:
             findings.append(
                 RiskFinding(
@@ -65,7 +65,7 @@ class UnauthenticatedDestructiveRule(SecurityRule):
         capability: MCPCapability,
         manifest: MCPManifest,
     ) -> list[RiskFinding]:
-        findings = []
+        findings: list[RiskFinding] = []
         if capability.is_destructive and not capability.has_auth:
             findings.append(
                 RiskFinding(
@@ -98,7 +98,7 @@ class ExcessivePermissionsRule(SecurityRule):
         capability: MCPCapability,
         manifest: MCPManifest,
     ) -> list[RiskFinding]:
-        findings = []
+        findings: list[RiskFinding] = []
         if len(capability.permissions) > self.MAX_PERMISSIONS:
             findings.append(
                 RiskFinding(
@@ -127,7 +127,7 @@ class NoDescriptionRule(SecurityRule):
         capability: MCPCapability,
         manifest: MCPManifest,
     ) -> list[RiskFinding]:
-        findings = []
+        findings: list[RiskFinding] = []
         if not capability.description or len(capability.description.strip()) < 10:
             findings.append(
                 RiskFinding(
@@ -153,14 +153,14 @@ class WriteWithoutReadRule(SecurityRule):
         capability: MCPCapability,
         manifest: MCPManifest,
     ) -> list[RiskFinding]:
-        findings = []
+        findings: list[RiskFinding] = []
         if not capability.is_write:
             return findings
 
         # Check if there's a corresponding read capability
         name = capability.name.lower()
         # Common patterns: create_X / get_X, update_X / get_X
-        resource_names = set()
+        resource_names: set[str] = set()
         for cap in manifest.capabilities:
             if cap.name.lower().startswith(("get_", "list_", "read_", "fetch_")):
                 resource_names.add(cap.name.lower().split("_", 1)[1])
@@ -211,7 +211,7 @@ class DestructiveWithoutConfirmationRule(SecurityRule):
         capability: MCPCapability,
         manifest: MCPManifest,
     ) -> list[RiskFinding]:
-        findings = []
+        findings: list[RiskFinding] = []
         if not capability.is_destructive:
             return findings
 
@@ -250,7 +250,7 @@ class ExplicitlyDisabledAuthRule(SecurityRule):
         capability: MCPCapability,
         manifest: MCPManifest,
     ) -> list[RiskFinding]:
-        findings = []
+        findings: list[RiskFinding] = []
         if capability.auth_disabled:
             level = (
                 RiskLevel.CRITICAL

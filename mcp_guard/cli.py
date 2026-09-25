@@ -18,7 +18,7 @@ from .scanner import Scanner
 
 @click.group()
 @click.version_option(version=__version__)
-def main():
+def main() -> None:
     """MCP Guard - Security scanner for MCP servers."""
     pass
 
@@ -82,7 +82,7 @@ def scan(
     deny_flag: bool,
     cli_deny_servers: tuple[str, ...],
     cli_deny_tools: tuple[str, ...],
-):
+) -> None:
     """Scan an MCP server for security risks.
 
     PATH can be a directory containing mcp.json or the config file itself.
@@ -166,7 +166,7 @@ def scan(
 
 @main.command()
 @click.argument("path", type=click.Path(exists=True))
-def info(path: str):
+def info(path: str) -> None:
     """Show MCP server info without scanning."""
     console = Console()
 
