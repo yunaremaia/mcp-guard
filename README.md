@@ -2,7 +2,7 @@
 
 **Security scanner for MCP servers** — audit capabilities, detect risks, generate security reports.
 
-![CI](https://github.com/yunaremaia/mcp-guard/actions/workflows/docker.yml/badge.svg) ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![CI](https://github.com/yunaremaia/mcp-guard/actions/workflows/docker.yml/badge.svg) ![License](https://img.shields.io/github/license/yunaremaia/mcp-guard)
 
 ## Why
 
