@@ -2,6 +2,8 @@
 
 **Security scanner for MCP servers** — audit capabilities, detect risks, generate security reports.
 
+![CI](https://github.com/yunaremaia/mcp-guard/actions/workflows/docker.yml/badge.svg) ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+
 ## Why
 
 The MCP ecosystem exploded (67,000+ servers in 18 months), but security hasn't kept up:
