@@ -47,7 +47,9 @@ mcp-guard = "mcp_guard.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/yunaremaia/mcp-guard"
+Repository = "https://github.com/yunaremaia/mcp-guard"
 Issues = "https://github.com/yunaremaia/mcp-guard/issues"
+Changelog = "https://github.com/yunaremaia/mcp-guard/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 include = ["mcp_guard*"]
