@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape
 
 from . import __version__
 from .formatters import to_json, to_rich, to_sarif
@@ -94,8 +95,9 @@ def scan(
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         sys.exit(1)
-    except json.JSONDecodeError as e:
-        console.print(f"[red]Error: Invalid JSON - {e}[/red]")
+    except ValueError as e:
+        # MCPParser wraps JSON decode and read errors in ValueError
+        console.print(f"[red]Error: {e}[/red]")
         sys.exit(1)
 
     # Resolve deny policy from config file or CLI options
@@ -175,6 +177,10 @@ def info(path: str) -> None:
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         sys.exit(1)
+    except ValueError as e:
+        # MCPParser wraps JSON decode and read errors in ValueError
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
 
     console.print(f"[bold]Server:[/bold] {manifest.name} v{manifest.version}")
     console.print(f"[bold]Description:[/bold] {manifest.description}")
@@ -190,7 +196,8 @@ def info(path: str) -> None:
         write_status = "✏️" if cap.is_write else ""
         destructive_status = "💥" if cap.is_destructive else ""
         console.print(
-            f"  {auth_status} [{cap.type.value}] {cap.name} {write_status} {destructive_status}"
+            f"  {auth_status} {escape(f'[{cap.type.value}]')} {cap.name} "
+            f"{write_status} {destructive_status}"
         )
         if cap.description:
             console.print(f"    {cap.description[:80]}")

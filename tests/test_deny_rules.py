@@ -9,12 +9,14 @@ import pytest
 from click.testing import CliRunner
 
 from mcp_guard.cli import main
+from mcp_guard.formatters import to_rich
 from mcp_guard.models import (
     MCPCapability,
     MCPCapabilityType,
     MCPManifest,
     RiskLevel,
 )
+from mcp_guard.parser import MCPParser
 from mcp_guard.policy import DenyPolicy
 from mcp_guard.scanner import Scanner
 
@@ -278,3 +280,122 @@ class TestCLIDenyOptions:
             ],
         )
         assert result.exit_code == 1
+
+    def test_server_tool_split_pattern_matches(self):
+        """A 'server/tool' pattern denies only the scoped server's tool."""
+        policy = DenyPolicy(tools=["github-*/delete_*"])
+
+        denied, pattern = policy.is_tool_denied("delete_repo", server_name="github-prod")
+
+        assert denied is True
+        assert pattern == "github-*/delete_*"
+
+    def test_server_tool_split_pattern_respects_server(self):
+        """The same tool on a different server is not denied."""
+        policy = DenyPolicy(tools=["github-*/delete_*"])
+
+        denied, _ = policy.is_tool_denied("delete_repo", server_name="gitlab-prod")
+
+        assert denied is False
+
+    def test_server_tool_split_pattern_requires_tool_match(self):
+        """A non-matching tool name is not denied by the scoped pattern."""
+        policy = DenyPolicy(tools=["github-*/delete_*"])
+
+        denied, _ = policy.is_tool_denied("get_repo", server_name="github-prod")
+
+        assert denied is False
+
+    def test_server_tool_split_pattern_without_server_name(self):
+        """A scoped pattern cannot match when no server is supplied."""
+        policy = DenyPolicy(tools=["github-*/delete_*"])
+
+        denied, _ = policy.is_tool_denied("delete_repo")
+
+        assert denied is False
+
+
+class TestPermissionExtraction:
+    """Test parser extraction of explicit capability permissions."""
+
+    def test_explicit_permissions_key_is_extracted(self):
+        """A 'permissions' list on a capability is carried into the model."""
+        manifest = MCPParser.from_dict(
+            {
+                "name": "perm-server",
+                "tools": [
+                    {
+                        "name": "read_files",
+                        "description": "Read files from disk",
+                        "permissions": ["fs:read", "net:none"],
+                    }
+                ],
+            }
+        )
+
+        assert manifest.capabilities[0].permissions == ["fs:read", "net:none"]
+
+    def test_auth_scopes_are_extracted(self):
+        """Scopes nested under 'auth' are merged into permissions."""
+        manifest = MCPParser.from_dict(
+            {
+                "name": "scope-server",
+                "tools": [
+                    {
+                        "name": "read_files",
+                        "description": "Read files from disk",
+                        "auth": {"type": "oauth2", "scopes": ["repo:read"]},
+                    }
+                ],
+            }
+        )
+
+        assert manifest.capabilities[0].permissions == ["repo:read"]
+
+
+class TestRichReportAuthDisabledRow:
+    """The human-readable report surfaces explicitly disabled auth."""
+
+    def test_rich_report_shows_auth_disabled_row(self, capsys):
+        """to_rich lists disabled auth when at least one capability disables it."""
+        manifest = MCPParser.from_dict(
+            {
+                "name": "insecure-server",
+                "version": "1.0.0",
+                "tools": [
+                    {
+                        "name": "read_files",
+                        "description": "Read files from disk",
+                        "auth": False,
+                    }
+                ],
+            }
+        )
+        result = Scanner().scan(manifest)
+
+        to_rich(result)
+        out = capsys.readouterr().out
+
+        assert "Auth Explicitly Disabled" in out
+
+    def test_rich_report_omits_row_when_auth_present(self, capsys):
+        """The disabled-auth row is absent when no capability disables auth."""
+        manifest = MCPParser.from_dict(
+            {
+                "name": "secure-server",
+                "version": "1.0.0",
+                "tools": [
+                    {
+                        "name": "read_files",
+                        "description": "Read files from disk",
+                        "auth": True,
+                    }
+                ],
+            }
+        )
+        result = Scanner().scan(manifest)
+
+        to_rich(result)
+        out = capsys.readouterr().out
+
+        assert "Auth Explicitly Disabled" not in out

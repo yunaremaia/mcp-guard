@@ -22,6 +22,7 @@ from mcp_guard.rules import (
     DestructiveWithoutConfirmationRule,
     ExcessivePermissionsRule,
     NoDescriptionRule,
+    SecurityRule,
     UnauthenticatedDestructiveRule,
     UnauthenticatedWriteRule,
     WriteWithoutReadRule,
@@ -482,3 +483,59 @@ class TestEndToEnd:
         json_str = to_json(result)
         parsed = json.loads(json_str)
         assert parsed["server"]["name"] == "e2e-test"
+
+
+class TestScannerCustomRules:
+    """Test Scanner.add_rule and custom rule registration."""
+
+    def test_add_rule_registers_custom_rule(self):
+        """A custom rule added to a scanner is applied during scan."""
+
+        class AlwaysFlagRule(SecurityRule):
+            rule_id = "CUSTOM001"
+            description = "Always flags a capability"
+
+            def check(
+                self, capability: MCPCapability, manifest: MCPManifest
+            ) -> list[RiskFinding]:
+                return [
+                    RiskFinding(
+                        rule_id=self.rule_id,
+                        level=RiskLevel.HIGH,
+                        message=f"Custom rule matched {capability.name}",
+                        capability_name=capability.name,
+                    )
+                ]
+
+        manifest = MCPParser.from_dict(
+            {
+                "name": "custom-test",
+                "tools": [{"name": "get_data", "description": "Get data from API"}],
+            }
+        )
+        scanner = Scanner(rules=[])
+        assert scanner.scan(manifest).findings == []
+
+        scanner.add_rule(AlwaysFlagRule())
+        findings = scanner.scan(manifest).findings
+
+        assert [f.rule_id for f in findings] == ["CUSTOM001"]
+
+    def test_default_rules_are_used_when_none_given(self):
+        """Constructing Scanner without rules still applies ALL_RULES."""
+        scanner = Scanner()
+        assert len(scanner.rules) == len(ALL_RULES)
+
+
+class TestBaseSecurityRule:
+    """Test the abstract SecurityRule contract."""
+
+    def test_base_check_raises_not_implemented(self):
+        """SecurityRule.check must be overridden by subclasses."""
+        manifest = MCPParser.from_dict({"name": "s", "tools": []})
+        capability = MCPCapability(
+            name="t", type=MCPCapabilityType.TOOL, description="d"
+        )
+
+        with pytest.raises(NotImplementedError):
+            SecurityRule().check(capability, manifest)

@@ -61,6 +61,17 @@ mcp_guard = ["py.typed"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 
+[tool.coverage.run]
+source = ["mcp_guard"]
+branch = false
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+# Ratcheted to the coverage the suite actually achieves (verified at 99.58%).
+# Raise this, never lower it, as tests are added.
+fail_under = 99
+
 [tool.ruff]
 target-version = "py310"
 line-length = 100
