@@ -123,10 +123,14 @@ class TestScanConfigAutoDiscovery:
         findings = json.loads(result.output)["findings"]
         assert "DENY001" in [f["rule_id"] for f in findings]
 
-    def test_broken_autodiscovered_config_is_ignored(
+    def test_broken_autodiscovered_config_exits_one(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        """A malformed auto-discovered config must not break the scan."""
+        """A malformed auto-discovered config must fail loudly, not silently (#83).
+
+        Swallowing it ran the scan with an empty deny policy, so a server the
+        policy named passed as clean and `--deny` still exited 0.
+        """
         target = tmp_path / "srv"
         manifest = write_manifest(target, CLEAN_MANIFEST)
         (target / "mcp-guard.yaml").write_text("deny: [unclosed", encoding="utf-8")
@@ -134,8 +138,9 @@ class TestScanConfigAutoDiscovery:
 
         result = CliRunner().invoke(main, ["scan", str(manifest), "--format", "json"])
 
-        assert result.exit_code == 0
-        assert json.loads(result.output)["findings"] == []
+        assert result.exit_code == 1
+        # Rich hard-wraps at the console width, so match on unwrapped output.
+        assert "mcp-guard.yaml" in "".join(result.output.split())
 
     def test_explicit_config_overrides_autodiscovery(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

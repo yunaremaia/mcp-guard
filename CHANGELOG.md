@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### Fixed
+- A malformed auto-discovered `mcp-guard.yaml`/`mcp-guard.yml` is now a hard
+  error (exit 1) instead of being silently skipped: the scan used to run with
+  an empty deny policy, so a server the policy named passed as clean and
+  `--deny` still exited 0 (#83)
+- `permissions` and `auth.scopes` accept a scalar string, a list, or nothing:
+  a bare string was iterated per character, so `"admin:write"` became 11
+  permissions and a spurious MCP003 finding; a non-list value raised a bare
+  `TypeError` (#85)
+- Description matching honours the same leading-read-verb gate as name
+  matching: `list_commands`, `get_command_history`, `help` and `readme` no
+  longer flag as command execution (nor `get_updates` as a write) purely for
+  mentioning the noun, while descriptions that act ("Deletes all records",
+  "Read the record and delete it") still match (#91)
 - `scan --fail-on low` no longer exits 1 on a zero-findings scan: an empty
   result now reads as below every threshold, so the lowest gate works as a
   "fail on anything at all" CI tripwire (#82)

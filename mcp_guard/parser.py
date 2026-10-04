@@ -30,6 +30,7 @@ _READ_VERBS = frozenset(
         "lookup",
         "query",
         "read",
+        "return",
         "retrieve",
         "search",
         "select",
@@ -120,6 +121,24 @@ def _description_pattern(keyword: str) -> re.Pattern[str]:
         alternatives.append(f"{re.escape(keyword[:-1])}(?:ies|ied)")
 
     return re.compile(rf"\b(?:{'|'.join(alternatives)})\b")
+
+
+def _as_permission_list(value: Any) -> list[str]:
+    """Normalize a `permissions`/`auth.scopes` value to a list of strings.
+
+    YAML and JSON both allow a scalar or a list, so a manifest may declare
+    `"permissions": "admin:write"` or the space/comma-separated scope form
+    `"repo:read repo:write"` (#85). `list.extend()` on a bare string iterates
+    it per character, inflating the count `ExcessivePermissionsRule` compares
+    against `MAX_PERMISSIONS`, and a non-iterable raised a bare TypeError.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part for part in re.split(r"[\s,]+", value.strip()) if part]
+    if isinstance(value, list | tuple):
+        return [str(item) for item in cast("list[Any]", value)]
+    raise ValueError(f"Expected a list or string of permissions/scopes, got {type(value).__name__}")
 
 
 class MCPParser:
@@ -234,17 +253,13 @@ class MCPParser:
     @classmethod
     def _extract_permissions(cls, data: dict[str, Any]) -> list[str]:
         """Extract permissions from capability data."""
-        permissions: list[str] = []
-
-        # Check for explicit permissions
-        if "permissions" in data:
-            permissions.extend(data["permissions"])
+        permissions = _as_permission_list(data.get("permissions"))
 
         # Check for scopes in auth config
         auth: Any = data.get("auth")
         if isinstance(auth, dict):
             auth_block = cast("dict[str, Any]", auth)
-            permissions.extend(auth_block.get("scopes", []))
+            permissions.extend(_as_permission_list(auth_block.get("scopes")))
 
         return permissions
 
@@ -308,7 +323,35 @@ class MCPParser:
         )
         if name_match:
             return True
+        if cls._description_read_gate(keywords, desc):
+            return False
         return any(_description_pattern(keyword).search(desc) for keyword in keywords)
+
+    @classmethod
+    def _description_read_gate(cls, keywords: Collection[str], desc: str) -> bool:
+        """Detect a description that only mentions a keyword as a read-only object.
+
+        The read-verb gate applied to the name alone left the description
+        ungated, so a read-only tool was flagged anyway: `get_command_history`
+        suppressed the name, then "Return the command history" re-raised it on
+        the noun "command" (#91). A description leading with a read verb is
+        suppressed unless a conjunction reveals a second operation ("Read the
+        record and delete it"), mirroring the name-path rule.
+        """
+        first_hit = min(
+            (
+                match.start()
+                for keyword in keywords
+                if (match := _description_pattern(keyword).search(desc)) is not None
+            ),
+            default=-1,
+        )
+        if first_hit < 0:
+            return False
+        lead = [token for token in _IDENTIFIER_SEPARATORS.split(desc[:first_hit]) if token]
+        return bool(lead) and lead[0] in _READ_VERBS and not any(
+            token in _CONJUNCTIONS for token in lead[1:]
+        )
 
     @classmethod
     def _detect_destructive(cls, data: dict[str, Any]) -> bool:

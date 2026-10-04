@@ -130,9 +130,15 @@ def scan(
                 if candidate.is_file():
                     try:
                         deny_policy = DenyPolicy.from_yaml(candidate)
-                        break
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Found but unreadable: a security control that fails
+                        # open is worse than one that fails, so this is fatal
+                        # exactly as it already is via --config (#83).
+                        console.print(
+                            f"[red]Error loading policy file {candidate}: {escape(str(e))}[/red]"
+                        )
+                        sys.exit(1)
+                    break
             if deny_policy:
                 break
 
