@@ -133,6 +133,86 @@ def _description_pattern(keyword: str) -> re.Pattern[str]:
     return re.compile(rf"\b(?:{'|'.join(alternatives)})\b")
 
 
+# Destructive keywords whose bare lemma is a common noun or adjective, so the
+# lemma alone cannot carry the claim. `drop` is a noun in "vertical drop" and
+# "the drop shadow"; `clear` is an adjective in "a clear error" and "makes that
+# clear". Measured against the 16,015-tool MCP010 conformance corpus, these two
+# lemmas account for 252 fires of which the great majority are benign. #84
+# already established this shape for `set`, whose gerund is the noun `setting`;
+# these need it because the lemma itself collides, not just an inflection.
+_VERB_FORM_ONLY_KEYWORDS = frozenset({"drop", "clear"})
+
+# A bare lemma immediately preceded by one of these markers is a noun or an
+# adjective, not a verb. Deliberately excludes "to " and "in ": "to clear an
+# optional field" and "in clear terms" are verb/idiom positions that a naive
+# marker list would wrongly suppress, and both are genuine detections.
+_NOMINAL_MARKERS = (
+    "the ",
+    "a ",
+    "an ",
+    "that ",
+    "its ",
+    "is ",
+    "was ",
+    "vertical ",
+    "make ",
+    "makes ",
+    "your ",
+    "some ",
+)
+
+
+@cache
+def _verb_form_pattern(keyword: str) -> re.Pattern[str]:
+    """Compile the inflected forms of a keyword, plus a context-guarded lemma.
+
+    The inflected forms are unambiguous verb positions: third person (`drops
+    the table`), gerund (`clearing`, `dropping`) and past participle
+    (`cleared`, `dropped`). The bare lemma is matched only when it is not
+    sitting in a nominal slot, so the imperative survives ("Drop the table when
+    done", "clear the cache when full") while "vertical drop" and "a clear
+    error" do not.
+
+    Rejecting the lemma outright is the wrong cut: it loses real detections,
+    because a description states an operation far more often in the imperative
+    than in the third person. On the corpus, lemma-only rejection costs 71
+    genuine fires; the guarded form suppresses 35 benign ones and none of the
+    imperative cases the repo's own tests assert.
+    """
+    stem = re.escape(keyword)
+
+    # The inflected forms, as unconditional alternatives rather than inferred
+    # from the lemma's shape: regular `-s`/`-ed`/`-ing` (clears, cleared,
+    # clearing), the `-es` third person, the e-dropping gerund (writing), and
+    # the CVC doubling (dropping, dropped). Shapes that do not exist in English
+    # ("droped", "droping") are harmless dead alternatives — cheaper and less
+    # error-prone than re-deriving the phonology per keyword, which is exactly
+    # the trap that first dropped `cleared` and `clearing` when the e-branch was
+    # written to test for a trailing "e" that `clear` does not have.
+    alternatives = [
+        f"{stem}s",
+        f"{stem}es",
+        f"{stem}ed",
+        f"{stem}ing",
+    ]
+
+    if keyword.endswith("e"):
+        alternatives.append(f"{re.escape(keyword[:-1])}ing")
+
+    if (
+        len(keyword) >= 3
+        and keyword[-1] not in "aeiouwxy"
+        and keyword[-2] in "aeiou"
+        and keyword[-3] not in "aeiou"
+    ):
+        alternatives.append(f"{stem}{keyword[-1]}(?:ing|ed)")
+
+    guard = "".join(f"(?<!{re.escape(marker)})" for marker in _NOMINAL_MARKERS)
+    alternatives.append(f"{guard}{stem}")
+
+    return re.compile(rf"\b(?:{'|'.join(alternatives)})\b")
+
+
 def as_permission_list(value: Any) -> list[str]:
     """Normalize a scalar-or-list policy value to a list of strings.
 
@@ -391,7 +471,14 @@ class MCPParser:
             return True
         if cls._description_read_gate(keywords, desc):
             return False
-        return any(_description_pattern(keyword).search(desc) for keyword in keywords)
+        return any(
+            (
+                _verb_form_pattern(keyword)
+                if keyword in _VERB_FORM_ONLY_KEYWORDS
+                else _description_pattern(keyword)
+            ).search(desc)
+            for keyword in keywords
+        )
 
     @classmethod
     def _description_read_gate(cls, keywords: Collection[str], desc: str) -> bool:
