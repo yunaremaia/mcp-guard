@@ -264,3 +264,52 @@ class TestNullDescription:
         result = Scanner().scan(manifest)
         # delete_files is destructive by name, so MCP002 fires — but no crash
         assert any(f.rule_id == "MCP002" for f in result.findings)
+
+
+class TestNullManifestFields:
+    """#103: null description or name in MCP manifest does not crash parser."""
+
+    def test_null_description_in_tools_does_not_crash(self):
+        manifest = MCPParser.from_dict(
+            {
+                "name": "test-server",
+                "description": None,
+                "tools": [{"name": "delete_repo", "description": None}],
+            }
+        )
+        assert manifest.description == ""
+        tool = manifest.capabilities[0]
+        assert tool.description == ""
+        assert tool.is_destructive is True
+
+    def test_null_name_and_collections(self):
+        manifest = MCPParser.from_dict(
+            {
+                "name": None,
+                "version": None,
+                "description": None,
+                "tools": [{"name": None, "description": None}],
+                "resources": None,
+                "prompts": None,
+                "metadata": None,
+            }
+        )
+        assert manifest.name == "unknown"
+        assert manifest.version == "0.0.0"
+        assert manifest.description == ""
+        assert len(manifest.capabilities) == 1
+        assert manifest.capabilities[0].name == "unnamed"
+        assert manifest.capabilities[0].description == ""
+        assert manifest.metadata == {}
+
+    def test_end_to_end_scan_with_null_description(self):
+        manifest = MCPParser.from_dict(
+            {
+                "name": "scanner-null-test",
+                "description": None,
+                "tools": [{"name": "write_data", "description": None}],
+            }
+        )
+        result = Scanner().scan(manifest)
+        assert result.manifest.name == "scanner-null-test"
+

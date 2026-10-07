@@ -1,7 +1,8 @@
 """Tests for MCP Guard parser error handling."""
+
 import json
+
 import pytest
-from pathlib import Path
 
 from mcp_guard.parser import MCPParser
 
@@ -57,3 +58,33 @@ def test_parser_valid_manifest(tmp_path):
     assert result.version == "1.0.0"
     assert len(result.capabilities) == 1
     assert result.capabilities[0].name == "get_data"
+
+
+def test_parser_handles_null_fields(tmp_path):
+    """#103: Parser handles null description, name, and capability lists without crashing."""
+    manifest = tmp_path / "mcp.json"
+    manifest.write_text(
+        json.dumps({
+            "name": "test-server",
+            "version": None,
+            "description": None,
+            "tools": [
+                {"name": "fetch_data", "description": None},
+                {"name": None, "description": "some tool"},
+            ],
+            "resources": None,
+            "prompts": None,
+            "metadata": None,
+        })
+    )
+
+    result = MCPParser.from_file(manifest)
+    assert result.name == "test-server"
+    assert result.version == "0.0.0"
+    assert result.description == ""
+    assert len(result.capabilities) == 2
+    assert result.capabilities[0].name == "fetch_data"
+    assert result.capabilities[0].description == ""
+    assert result.capabilities[1].name == "unnamed"
+    assert result.capabilities[1].description == "some tool"
+
