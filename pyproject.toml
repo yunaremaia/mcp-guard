@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-guard"
-version = "0.2.0"
+version = "0.3.0"
 description = "Security scanner for MCP servers - audit capabilities, detect risks"
 readme = "README.md"
 license = {text = "MIT"}
