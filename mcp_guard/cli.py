@@ -13,6 +13,7 @@ from rich.markup import escape
 from . import __version__
 from .formatters import to_json, to_rich, to_sarif
 from .injection import InjectionEngineUnavailableError
+from .npm_scanner import NPMScanner
 from .parser import MCPParser
 from .policy import DenyPolicy
 from .rules import ALL_RULES, PromptInjectionRule, SecurityRule
@@ -84,6 +85,14 @@ def main() -> None:
     help="Add Little Canary's structural filter to prompt injection checks "
     "(requires the 'canary' extra)",
 )
+@click.option(
+    "--npm",
+    "npm_mode",
+    is_flag=True,
+    default=False,
+    help="Treat PATH as a project root: scan every MCP config found under "
+    "node_modules/ and list MCP-related dependencies from package.json",
+)
 def scan(
     path: str,
     output_format: str,
@@ -94,24 +103,19 @@ def scan(
     cli_deny_servers: tuple[str, ...],
     cli_deny_tools: tuple[str, ...],
     strict_injection: bool,
+    npm_mode: bool,
 ) -> None:
     """Scan an MCP server for security risks.
 
     PATH can be a directory containing mcp.json or the config file itself.
+    With --npm, PATH is treated as a project root: every MCP config found under
+    its node_modules/ tree is scanned and MCP-related dependencies are listed
+    from package.json.
     """
     console = Console()
 
-    try:
-        manifest = MCPParser.from_file(path)
-    except FileNotFoundError as e:
-        console.print(f"[red]Error: {escape(str(e))}[/red]", soft_wrap=True)
-        sys.exit(1)
-    except ValueError as e:
-        # MCPParser wraps JSON decode and read errors in ValueError.
-        # Escaped: a validation error quotes the offending input verbatim, so an
-        # attacker-controlled manifest can carry Rich markup into the message.
-        console.print(f"[red]Error: {escape(str(e))}[/red]", soft_wrap=True)
-        sys.exit(1)
+    # The deny policy and rules are shared by the single-manifest and --npm
+    # paths, so they are resolved up front and the paths then diverge.
 
     # Resolve deny policy from config file or CLI options
     deny_policy: DenyPolicy | None = None
@@ -135,8 +139,8 @@ def scan(
                         # open is worse than one that fails, so this is fatal
                         # exactly as it already is via --config (#83).
                         # soft_wrap: Rich word-wraps at the console width, which
-                        # can split the filename across a line break and leave the
-                        # user with a path that does not exist.
+                        # can split the filename across a line break and leave
+                        # the user with a path that does not exist.
                         console.print(
                             f"[red]Error loading policy file {candidate}: {escape(str(e))}[/red]",
                             soft_wrap=True,
@@ -160,6 +164,32 @@ def scan(
             console.print(f"[red]Error: {escape(str(e))}[/red]", soft_wrap=True)
             sys.exit(1)
         rules = [strict_rule if isinstance(r, PromptInjectionRule) else r for r in ALL_RULES]
+
+    if npm_mode:
+        _run_npm_scan(
+            Path(path),
+            rules=rules,
+            deny_policy=deny_policy,
+            output_format=output_format,
+            output=output,
+            fail_on=fail_on,
+            deny_flag=deny_flag,
+            console=console,
+        )
+        return
+
+    # Single-manifest scan (the default path).
+    try:
+        manifest = MCPParser.from_file(path)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error: {escape(str(e))}[/red]", soft_wrap=True)
+        sys.exit(1)
+    except ValueError as e:
+        # MCPParser wraps JSON decode and read errors in ValueError.
+        # Escaped: a validation error quotes the offending input verbatim, so an
+        # attacker-controlled manifest can carry Rich markup into the message.
+        console.print(f"[red]Error: {escape(str(e))}[/red]", soft_wrap=True)
+        sys.exit(1)
 
     scanner = Scanner(rules=rules, deny_policy=deny_policy)
     result = scanner.scan(manifest)
@@ -195,6 +225,55 @@ def scan(
         # even on a zero-findings scan (#82).
         max_level = max(
             (levels.get(f.level.value.lower(), 0) for f in result.findings),
+            default=-1,
+        )
+        if max_level >= threshold:
+            sys.exit(1)
+
+
+def _run_npm_scan(
+    base: Path,
+    rules: list[SecurityRule] | None,
+    deny_policy: DenyPolicy | None,
+    output_format: str,
+    output: str | None,
+    fail_on: str | None,
+    deny_flag: bool,
+    console: Console,
+) -> None:
+    """Discover and scan MCP servers installed as npm packages under ``base``.
+
+    Shared output/deny/fail-on handling for the --npm path: a DENY finding in
+    any package fails under --deny, and any finding at or above --fail-on does
+    the same. A manifest that cannot be parsed is skipped, not fatal.
+    """
+    npm_scanner = NPMScanner(base, rules=rules, deny_policy=deny_policy)
+    npm_scanner.scan()
+
+    all_findings = [finding for result in npm_scanner.results for finding in result.findings]
+
+    has_denied = any(finding.rule_id.startswith("DENY") for finding in all_findings)
+    if deny_flag and has_denied:
+        sys.exit(1)
+
+    if output_format in ("json", "sarif"):
+        if output_format == "json":
+            payload = npm_scanner.to_json()
+        else:
+            payload = json.dumps(npm_scanner.to_sarif(), indent=2)
+        if output:
+            Path(output).write_text(payload, encoding="utf-8")
+            console.print(f"[green]Output written to {escape(output)}[/green]")
+        else:
+            click.echo(payload)
+    else:
+        npm_scanner.to_rich()
+
+    if fail_on:
+        levels = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        threshold = levels[fail_on]
+        max_level = max(
+            (levels.get(finding.level.value.lower(), 0) for finding in all_findings),
             default=-1,
         )
         if max_level >= threshold:

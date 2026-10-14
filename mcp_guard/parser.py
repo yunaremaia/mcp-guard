@@ -9,6 +9,8 @@ from functools import cache
 from pathlib import Path
 from typing import Any, cast
 
+import yaml
+
 from .models import MCPCapability, MCPCapabilityType, MCPManifest
 
 # Leading verbs that mark a capability as read-only regardless of the rest of
@@ -237,6 +239,52 @@ def as_permission_list(value: Any) -> list[str]:
     )
 
 
+def _js_object_literal(text: str) -> str:
+    """Extract the JSON-compatible object literal from a JS config body.
+
+    Strips an optional ``module.exports``/``export default`` assignment
+    prefix and returns the first balanced ``{ ... }`` object (braces inside
+    string literals are ignored). This never evaluates JavaScript; the
+    returned text is handed to ``json.loads``, so the config must use
+    double-quoted keys and string values.
+    """
+    stripped = text.strip()
+    m = re.match(
+        r"""^(?:module\.exports|exports[\w.\-]*|export\s+default)\s*=\s*""",
+        stripped,
+    )
+    if m:
+        stripped = stripped[m.end():]
+    start = stripped.find("{")
+    if start == -1:
+        return stripped.rstrip("; \t")
+    depth = 0
+    in_str = False
+    quote = ""
+    escape = False
+    for i in range(start, len(stripped)):
+        ch = stripped[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == quote:
+                in_str = False
+            continue
+        if ch in ('"', "'"):
+            in_str = True
+            quote = ch
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return stripped[start : i + 1]
+    # Unbalanced braces: return to end of text and let json.loads report it.
+    return stripped[start:].rstrip("; \t")
+
+
 class MCPParser:
     """Parse MCP server configuration files."""
 
@@ -266,10 +314,21 @@ class MCPParser:
 
     @classmethod
     def from_file(cls, path: str | Path) -> MCPManifest:
-        """Parse an MCP manifest from a file path."""
+        """Parse an MCP manifest from a file path.
+
+        The format is selected by file extension: ``.json``, ``.yaml`` /
+        ``.yml``, or ``.js`` (a JSON-compatible object literal, never
+        executed). Directories are handled by :meth:`from_directory`, which
+        looks for a known JSON config file.
+        """
         path = cls._validate_path(path)
         if path.is_dir():
             return cls.from_directory(path)
+        suffix = path.suffix.lower()
+        if suffix in (".yaml", ".yml"):
+            return cls.from_yaml(path)
+        if suffix == ".js":
+            return cls.from_js(path)
         return cls.from_json(path)
 
     @classmethod
@@ -301,6 +360,62 @@ class MCPParser:
 
         manifest = cls.from_dict(cast("dict[str, Any]", data))
         manifest.source_path = str(json_path)
+        return manifest
+
+    @classmethod
+    def from_yaml(cls, yaml_path: str | Path) -> MCPManifest:
+        """Parse an MCP manifest from a YAML file (``.yaml`` / ``.yml``)."""
+        yaml_path = Path(yaml_path)
+        try:
+            with open(yaml_path, encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in {yaml_path}: {e}") from e
+        except OSError as e:
+            raise ValueError(f"Cannot read {yaml_path}: {e}") from e
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Expected a YAML object in {yaml_path}, got {type(data).__name__}"
+            )
+
+        manifest = cls.from_dict(cast("dict[str, Any]", data))
+        manifest.source_path = str(yaml_path)
+        return manifest
+
+    @classmethod
+    def from_js(cls, js_path: str | Path) -> MCPManifest:
+        """Parse an MCP manifest from a JavaScript config file (``.js``).
+
+        The config must be a JSON-compatible object literal, optionally
+        preceded by a ``module.exports =`` / ``export default`` assignment
+        and followed by a ``;``. Arbitrary JavaScript is deliberately
+        **not** evaluated, so executable JS bodies are not supported;
+        that keeps a security scanner from running untrusted code.
+        """
+        js_path = Path(js_path)
+        try:
+            text = js_path.read_text(encoding="utf-8")
+        except OSError as e:
+            raise ValueError(f"Cannot read {js_path}: {e}") from e
+
+        body = _js_object_literal(text)
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Unsupported JavaScript config in {js_path}: expected a "
+                f"JSON-compatible object literal (not evaluated JS). {e}"
+            ) from e
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Expected a JavaScript object in {js_path}, "
+                f"got {type(data).__name__}"
+            )
+
+        manifest = cls.from_dict(cast("dict[str, Any]", data))
+        manifest.source_path = str(js_path)
         return manifest
 
     @classmethod

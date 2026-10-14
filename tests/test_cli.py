@@ -391,6 +391,125 @@ class TestInfoCommand:
         assert not isinstance(result.exception, ValueError)
 
 
+class TestScanNpm:
+    """The --npm flag treats PATH as a project root and scans node_modules."""
+
+    CRITICAL = {
+        "name": "evil-server",
+        "version": "1.0.0",
+        "tools": [{"name": "delete_all", "description": "delete all files"}],
+    }
+    CLEAN = {
+        "name": "safe-server",
+        "version": "1.0.0",
+        "tools": [{"name": "get_status", "description": "safe check"}],
+    }
+
+    def _project(self, tmp_path: Path, with_critical: bool = True) -> Path:
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "root", "dependencies": {"@mcp/tools": "1.0.0"}}),
+            encoding="utf-8",
+        )
+        nm = tmp_path / "node_modules"
+        (nm / "safe-pkg").mkdir(parents=True)
+        (nm / "safe-pkg" / "mcp.json").write_text(
+            json.dumps(self.CLEAN), encoding="utf-8"
+        )
+        if with_critical:
+            (nm / "evil-pkg").mkdir(parents=True)
+            (nm / "evil-pkg" / "mcp.json").write_text(
+                json.dumps(self.CRITICAL), encoding="utf-8"
+            )
+        return tmp_path
+
+    def test_json_format_lists_dependencies_and_scans(self, tmp_path: Path) -> None:
+        root = self._project(tmp_path)
+        result = CliRunner().invoke(
+            main, ["scan", str(root), "--npm", "--format", "json"]
+        )
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["npm_dependencies"] == ["@mcp/tools"]
+        assert len(payload["scanned"]) == 2
+        assert payload["skipped"] == []
+
+    def test_sarif_format_is_multi_run(self, tmp_path: Path) -> None:
+        root = self._project(tmp_path)
+        result = CliRunner().invoke(
+            main, ["scan", str(root), "--npm", "-f", "sarif"]
+        )
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["version"] == "2.1.0"
+        assert len(payload["runs"]) == 2
+
+    def test_output_file_written(self, tmp_path: Path) -> None:
+        root = self._project(tmp_path)
+        out = tmp_path / "report.json"
+        result = CliRunner().invoke(
+            main, ["scan", str(root), "--npm", "-f", "json", "-o", str(out)]
+        )
+        assert result.exit_code == 0
+        assert out.exists()
+        assert json.loads(out.read_text(encoding="utf-8"))["npm_dependencies"] == [
+            "@mcp/tools"
+        ]
+
+    def test_deny_fails_on_denied_server(self, tmp_path: Path) -> None:
+        root = self._project(tmp_path)
+        result = CliRunner().invoke(
+            main,
+            [
+                "scan",
+                str(root),
+                "--npm",
+                "--deny",
+                "--deny-server",
+                "evil-server",
+                "-f",
+                "json",
+            ],
+        )
+        assert result.exit_code == 1
+
+    def test_fail_on_critical_triggers(self, tmp_path: Path) -> None:
+        root = self._project(tmp_path)
+        result = CliRunner().invoke(
+            main,
+            [
+                "scan",
+                str(root),
+                "--npm",
+                "--fail-on",
+                "critical",
+                "-f",
+                "json",
+            ],
+        )
+        assert result.exit_code == 1
+
+    def test_fail_on_critical_passes_clean_project(self, tmp_path: Path) -> None:
+        root = self._project(tmp_path, with_critical=False)
+        result = CliRunner().invoke(
+            main,
+            [
+                "scan",
+                str(root),
+                "--npm",
+                "--fail-on",
+                "critical",
+                "-f",
+                "json",
+            ],
+        )
+        assert result.exit_code == 0
+
+    def test_default_rich_render_runs_without_error(self, tmp_path: Path) -> None:
+        root = self._project(tmp_path)
+        result = CliRunner().invoke(main, ["scan", str(root), "--npm"])
+        assert result.exit_code == 0
+
+
 class TestTopLevelGroup:
     """The root group exposes a version and the registered subcommands."""
 

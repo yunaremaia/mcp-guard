@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+- **feat(cli)**: `--npm` flag on `scan` treats PATH as a project root: it lists
+  the MCP-related dependencies declared in `package.json` and scans every MCP
+  config (`mcp.json` and the other known names) found under `node_modules/`,
+  attributing each result to its owning npm package. A manifest that cannot be
+  parsed is skipped and reported, not fatal. `--deny`, `--fail-on` and the JSON /
+  SARIF / CLI outputs apply to the aggregated result set; SARIF is emitted as a
+  multi-run document. Discovery is filesystem-only (no `npm`/`node`, no network,
+  no manifest execution) (#51)
+- **feat(parser)**: YAML and JavaScript config support in `MCPParser.from_file` — file
+  extension now selects the format: `.yaml`/`.yml` are parsed with a safe YAML loader, and
+  `.js` files are read as a JSON-compatible object literal (`module.exports = { ... }` or
+  `export default { ... }`, never executed). JSON remains the default for unknown extensions
+  and for directory scans (#52)
+
 ## [0.3.1] - 2026-10-11
 
 ### Security
