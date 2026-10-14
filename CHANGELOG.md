@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- **feat(parser)**: YAML and JavaScript config support in `MCPParser.from_file` — file
+  extension now selects the format: `.yaml`/`.yml` are parsed with a safe YAML loader, and
+  `.js` files are read as a JSON-compatible object literal (`module.exports = { ... }` or
+  `export default { ... }`, never executed). JSON remains the default for unknown extensions
+  and for directory scans (#52)
+
 ## [0.3.1] - 2026-10-11
 
 ### Security

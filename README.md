@@ -67,6 +67,16 @@ mcp-guard verify @scope/mcp-server@1.2.0 --policy strict --format json
 mcp-guard info ./my-mcp-server
 ```
 
+## Supported config formats
+
+`mcp-guard scan <file>` (and `MCPParser.from_file`) auto-detects the format from the file extension:
+
+- **`.json`** — standard JSON manifest; the default.
+- **`.yaml` / `.yml`** — YAML manifest (parsed with a safe loader, no code execution).
+- **`.js`** — a JavaScript object-literal config (`module.exports = { ... }` or `export default { ... }`). The body is read as a JSON-compatible object literal and is **never executed**, so executable JS bodies are not supported. Keys and string values must use double quotes, as in JSON.
+
+Directories (the `scan ./my-mcp-server` form) still look for a known JSON config file such as `mcp.json`; pass a YAML or `.js` file directly to use those formats.
+
 ## Deny Rules & Policy Enforcement
 
 You can configure deny rules in a YAML file (e.g. `policy.yaml` or default `mcp-guard.yaml`). Deny rules support exact matches, wildcards (`*`), and tool-level scoping:
