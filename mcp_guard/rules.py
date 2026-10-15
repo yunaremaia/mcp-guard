@@ -274,10 +274,7 @@ class ExplicitlyDisabledAuthRule(SecurityRule):
                 RiskFinding(
                     rule_id=self.rule_id,
                     level=level,
-                    message=(
-                        f"Capability '{capability.name}' explicitly disables "
-                        "authentication"
-                    ),
+                    message=(f"Capability '{capability.name}' explicitly disables authentication"),
                     capability_name=capability.name,
                     capability_type=capability.type,
                     suggestion=(

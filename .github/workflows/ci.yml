@@ -6,11 +6,51 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install package and dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff check
+        run: ruff check mcp_guard/
+
+      - name: Ruff format check
+        run: ruff format --check mcp_guard/
+
+      - name: Mypy (strict)
+        run: mypy --strict mcp_guard/
+
+      - name: Pyright (strict)
+        run: pyright
+
   test:
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -32,35 +72,7 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests with coverage
-        run: python -m pytest -q --cov=mcp_guard --cov-report=term-missing
+        run: pytest --cov=mcp_guard --cov-report=term-missing -v
 
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-
-      - name: Install package and dev dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Ruff
-        run: ruff check mcp_guard
-
-      - name: Mypy
-        run: mypy --strict mcp_guard
-
-      - name: Pyright
-        run: pyright
+      - name: Fail if coverage below 80%
+        run: pytest --cov=mcp_guard --cov-fail-under=80 -q --no-header

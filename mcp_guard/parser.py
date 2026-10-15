@@ -232,8 +232,7 @@ def as_permission_list(value: Any) -> list[str]:
     if isinstance(value, (list, tuple)):
         return [str(item) for item in cast("list[Any]", value)]
     raise ValueError(
-        f"Expected a list or string of permissions/scopes/deny entries, "
-        f"got {type(value).__name__}"
+        f"Expected a list or string of permissions/scopes/deny entries, got {type(value).__name__}"
     )
 
 
@@ -543,8 +542,10 @@ class MCPParser:
             return False
         clause = _CLAUSE_BOUNDARY.split(desc[:last_hit])[-1]
         lead = [token for token in _IDENTIFIER_SEPARATORS.split(clause) if token]
-        return bool(lead) and lead[0] in _READ_VERBS and not any(
-            token in _CONJUNCTIONS for token in lead[1:]
+        return (
+            bool(lead)
+            and lead[0] in _READ_VERBS
+            and not any(token in _CONJUNCTIONS for token in lead[1:])
         )
 
     @classmethod

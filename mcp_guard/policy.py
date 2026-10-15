@@ -121,9 +121,7 @@ class DenyPolicy(BaseModel):
                 # Check server/tool split pattern e.g. "github-*/delete_*"
                 if "/" in pattern:
                     srv_pat, tool_pat = pattern.split("/", 1)
-                    if _glob_match(server_name, srv_pat) and _glob_match(
-                        tool_name, tool_pat
-                    ):
+                    if _glob_match(server_name, srv_pat) and _glob_match(tool_name, tool_pat):
                         return True, pattern
 
         return False, None
